@@ -14,6 +14,12 @@ function AdminDashboard() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("pending");
 
+  // Welfare state
+  const [selectedWorker, setSelectedWorker] = useState(null);
+  const [welfare, setWelfare] = useState(null);
+  const [welfareLoading, setWelfareLoading] = useState(false);
+  const [welfareError, setWelfareError] = useState("");
+
   const token = localStorage.getItem("token");
 
   const loadDashboard = async (refresh = false) => {
@@ -88,13 +94,17 @@ function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // --------------------------------------------------
+  // WORKER VERIFICATION
+  // --------------------------------------------------
+
   const updateVerification = async (workerId, status) => {
     try {
       setActionLoading(workerId);
       setError("");
 
       const response = await fetch(
-        `${API_URL}/api/workers/${workerId}/verification`,
+        `${API_URL}/api/admin/workers/${workerId}/verification`,
         {
           method: "PATCH",
           headers: {
@@ -125,6 +135,58 @@ function AdminDashboard() {
       setActionLoading(null);
     }
   };
+
+  // --------------------------------------------------
+  // WORKER WELFARE
+  // --------------------------------------------------
+
+  const loadWorkerWelfare = async (worker) => {
+    try {
+      setSelectedWorker(worker);
+      setWelfare(null);
+      setWelfareError("");
+      setWelfareLoading(true);
+
+      const response = await fetch(
+        `${API_URL}/api/admin/workers/${worker._id}/welfare`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Unable to load worker welfare details."
+        );
+      }
+
+      setWelfare(data.welfare || {});
+    } catch (err) {
+      console.error("Worker welfare error:", err);
+
+      setWelfareError(
+        err.message ||
+          "Unable to load welfare information."
+      );
+    } finally {
+      setWelfareLoading(false);
+    }
+  };
+
+  const closeWelfare = () => {
+    setSelectedWorker(null);
+    setWelfare(null);
+    setWelfareError("");
+    setWelfareLoading(false);
+  };
+
+  // --------------------------------------------------
+  // FILTERING
+  // --------------------------------------------------
 
   const filteredWorkers = useMemo(() => {
     return workers.filter((worker) => {
@@ -191,6 +253,56 @@ function AdminDashboard() {
     return "pending";
   };
 
+  // --------------------------------------------------
+  // WELFARE HELPERS
+  // --------------------------------------------------
+
+  const formatCurrency = (value) => {
+    const number = Number(value || 0);
+
+    return `₹${number.toLocaleString("en-IN")}`;
+  };
+
+  const getTrainingName = (training) => {
+    return (
+      training?.trainingProgramId?.title ||
+      training?.trainingProgramId?.name ||
+      training?.trainingProgram?.title ||
+      training?.trainingProgram?.name ||
+      training?.title ||
+      training?.name ||
+      "Training Program"
+    );
+  };
+
+  const getTrainingStatus = (training) => {
+    return (
+      training?.status ||
+      training?.trainingStatus ||
+      "enrolled"
+    );
+  };
+
+  const getSchemeName = (scheme) => {
+    return (
+      scheme?.scheme?.name ||
+      scheme?.scheme?.schemeName ||
+      scheme?.name ||
+      scheme?.schemeName ||
+      "Government Scheme"
+    );
+  };
+
+  const getSchemeDescription = (scheme) => {
+    return (
+      scheme?.scheme?.description ||
+      scheme?.description ||
+      scheme?.scheme?.benefits ||
+      scheme?.benefits ||
+      ""
+    );
+  };
+
   if (loading) {
     return (
       <>
@@ -199,9 +311,12 @@ function AdminDashboard() {
         <div className="admin-loading-page">
           <div className="admin-loading-card">
             <div className="loading-mark">S</div>
+
             <div>
               <strong>Loading Admin Console</strong>
-              <span>Preparing Sahaayak operations...</span>
+              <span>
+                Preparing Sahaayak operations...
+              </span>
             </div>
           </div>
         </div>
@@ -244,7 +359,9 @@ function AdminDashboard() {
                   {user?.name || "Administrator"}
                 </strong>
 
-                <span>Platform Administrator</span>
+                <span>
+                  Platform Administrator
+                </span>
               </div>
             </div>
 
@@ -291,7 +408,10 @@ function AdminDashboard() {
               disabled={refreshing}
             >
               <span>↻</span>
-              {refreshing ? "Refreshing..." : "Refresh"}
+
+              {refreshing
+                ? "Refreshing..."
+                : "Refresh"}
             </button>
 
           </section>
@@ -323,6 +443,7 @@ function AdminDashboard() {
             </div>
 
             <div className="admin-stat-card">
+
               <div className="stat-top">
                 <span>Verified Workers</span>
                 <div>✓</div>
@@ -333,9 +454,11 @@ function AdminDashboard() {
               <p>
                 Approved service providers
               </p>
+
             </div>
 
             <div className="admin-stat-card">
+
               <div className="stat-top">
                 <span>Available Now</span>
                 <div>◉</div>
@@ -346,9 +469,11 @@ function AdminDashboard() {
               <p>
                 Workers currently accepting jobs
               </p>
+
             </div>
 
             <div className="admin-stat-card">
+
               <div className="stat-top">
                 <span>Rejected</span>
                 <div>×</div>
@@ -359,6 +484,7 @@ function AdminDashboard() {
               <p>
                 Applications not approved
               </p>
+
             </div>
 
           </section>
@@ -398,6 +524,7 @@ function AdminDashboard() {
             <div className="admin-controls">
 
               <div className="admin-search">
+
                 <span>⌕</span>
 
                 <input
@@ -407,6 +534,7 @@ function AdminDashboard() {
                   }
                   placeholder="Search workers, skills or occupation..."
                 />
+
               </div>
 
               <div className="filter-tabs">
@@ -417,6 +545,7 @@ function AdminDashboard() {
                   ["rejected", "Rejected"],
                   ["all", "All Workers"],
                 ].map(([value, label]) => (
+
                   <button
                     key={value}
                     className={
@@ -428,6 +557,7 @@ function AdminDashboard() {
                       setFilter(value)
                     }
                   >
+
                     {label}
 
                     {value !== "all" && (
@@ -439,7 +569,9 @@ function AdminDashboard() {
                           : rejectedCount}
                       </span>
                     )}
+
                   </button>
+
                 ))}
 
               </div>
@@ -514,7 +646,10 @@ function AdminDashboard() {
                               )}`}
                             >
                               <i></i>
-                              {getStatusLabel(status)}
+
+                              {getStatusLabel(
+                                status
+                              )}
                             </span>
 
                           </div>
@@ -556,6 +691,7 @@ function AdminDashboard() {
                       <div className="worker-details">
 
                         <div className="detail-block">
+
                           <span>SKILLS</span>
 
                           <div className="skill-list">
@@ -576,9 +712,11 @@ function AdminDashboard() {
                             )}
 
                           </div>
+
                         </div>
 
                         <div className="detail-block">
+
                           <span>LOCATION</span>
 
                           <strong>
@@ -586,9 +724,11 @@ function AdminDashboard() {
                               ? "Location available"
                               : "Not provided"}
                           </strong>
+
                         </div>
 
                         <div className="detail-block">
+
                           <span>AVAILABILITY</span>
 
                           <strong
@@ -602,14 +742,27 @@ function AdminDashboard() {
                               ? "Available"
                               : "Offline"}
                           </strong>
+
                         </div>
 
                       </div>
 
+                      {/* ACTIONS */}
+
                       <div className="worker-actions">
+
+                        <button
+                          className="welfare-btn"
+                          onClick={() =>
+                            loadWorkerWelfare(worker)
+                          }
+                        >
+                          Welfare Details
+                        </button>
 
                         {status === "pending" && (
                           <>
+
                             <button
                               className="reject-btn"
                               disabled={
@@ -644,10 +797,12 @@ function AdminDashboard() {
                                 ? "Updating..."
                                 : "Approve Worker →"}
                             </button>
+
                           </>
                         )}
 
                         {status === "verified" && (
+
                           <button
                             className="review-btn"
                             onClick={() =>
@@ -663,9 +818,11 @@ function AdminDashboard() {
                           >
                             Revoke Verification
                           </button>
+
                         )}
 
                         {status === "rejected" && (
+
                           <button
                             className="approve-btn"
                             onClick={() =>
@@ -681,6 +838,7 @@ function AdminDashboard() {
                           >
                             Verify Worker →
                           </button>
+
                         )}
 
                       </div>
@@ -703,7 +861,10 @@ function AdminDashboard() {
             </div>
 
             <div>
-              <span>SAHAAYAK OPERATIONS</span>
+
+              <span>
+                SAHAAYAK OPERATIONS
+              </span>
 
               <h3>
                 A trusted network starts with verified people.
@@ -714,6 +875,7 @@ function AdminDashboard() {
                 verification decisions consistent to
                 maintain reliable local services.
               </p>
+
             </div>
 
           </section>
@@ -721,11 +883,606 @@ function AdminDashboard() {
         </main>
 
         <footer className="admin-footer">
+
           <span>SAHAAYAK</span>
+
           <p>
             Cooperative local services platform
           </p>
+
         </footer>
+
+        {/* ==================================================
+            WORKER WELFARE MODAL
+        ================================================== */}
+
+        {selectedWorker && (
+          <div
+            className="welfare-overlay"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                closeWelfare();
+              }
+            }}
+          >
+
+            <div className="welfare-modal">
+
+              {/* MODAL HEADER */}
+
+              <div className="welfare-header">
+
+                <div>
+
+                  <span className="admin-eyebrow">
+                    WORKER WELFARE
+                  </span>
+
+                  <h2>
+                    {getWorkerName(selectedWorker)}
+                  </h2>
+
+                  <p>
+                    Salary, training, schemes and
+                    insurance information
+                  </p>
+
+                </div>
+
+                <button
+                  className="welfare-close"
+                  onClick={closeWelfare}
+                >
+                  ×
+                </button>
+
+              </div>
+
+              {/* LOADING */}
+
+              {welfareLoading && (
+
+                <div className="welfare-loading">
+
+                  <div className="welfare-spinner">
+                    S
+                  </div>
+
+                  <strong>
+                    Loading welfare details...
+                  </strong>
+
+                  <span>
+                    Fetching salary, training and
+                    welfare information.
+                  </span>
+
+                </div>
+
+              )}
+
+              {/* ERROR */}
+
+              {!welfareLoading && welfareError && (
+
+                <div className="welfare-error">
+
+                  <span>!</span>
+
+                  <div>
+                    <strong>
+                      Unable to load welfare details
+                    </strong>
+
+                    <p>
+                      {welfareError}
+                    </p>
+                  </div>
+
+                </div>
+
+              )}
+
+              {/* CONTENT */}
+
+              {!welfareLoading &&
+                !welfareError &&
+                welfare && (
+
+                <div className="welfare-content">
+
+                  {/* SALARY */}
+
+                  <section className="welfare-section">
+
+                    <div className="welfare-section-heading">
+
+                      <div className="welfare-icon">
+                        ₹
+                      </div>
+
+                      <div>
+                        <h3>
+                          Salary
+                        </h3>
+
+                        <p>
+                          Current worker compensation
+                        </p>
+                      </div>
+
+                    </div>
+
+                    <div className="salary-card">
+
+                      <div>
+                        <span>
+                          FINAL SALARY
+                        </span>
+
+                        <strong>
+                          {formatCurrency(
+                            welfare.salary?.finalSalary
+                          )}
+                        </strong>
+                      </div>
+
+                      <div className="salary-details">
+
+                        <div>
+                          <span>
+                            Base Salary
+                          </span>
+
+                          <strong>
+                            {formatCurrency(
+                              welfare.salary?.baseSalary
+                            )}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
+                            Completed Jobs
+                          </span>
+
+                          <strong>
+                            {welfare.salary
+                              ?.completedJobs || 0}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
+                            Extra Jobs
+                          </span>
+
+                          <strong>
+                            {welfare.salary
+                              ?.extraJobs || 0}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
+                            Overtime Pay
+                          </span>
+
+                          <strong>
+                            {formatCurrency(
+                              welfare.salary
+                                ?.overtimePay
+                            )}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
+                            Performance Bonus
+                          </span>
+
+                          <strong>
+                            {formatCurrency(
+                              welfare.salary
+                                ?.performanceBonus
+                            )}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>
+                            Status
+                          </span>
+
+                          <strong className="salary-status">
+                            {welfare.salary
+                              ?.status || "Pending"}
+                          </strong>
+                        </div>
+
+                      </div>
+
+                    </div>
+
+                  </section>
+
+                  {/* TRAINING */}
+
+                  <section className="welfare-section">
+
+                    <div className="welfare-section-heading">
+
+                      <div className="welfare-icon">
+                        ✓
+                      </div>
+
+                      <div>
+                        <h3>
+                          Training
+                        </h3>
+
+                        <p>
+                          Worker training programs
+                        </p>
+                      </div>
+
+                    </div>
+
+                    {Array.isArray(
+                      welfare.trainings
+                    ) &&
+                    welfare.trainings.length > 0 ? (
+
+                      <div className="welfare-list">
+
+                        {welfare.trainings.map(
+                          (training, index) => (
+
+                            <div
+                              className="welfare-list-item"
+                              key={
+                                training._id ||
+                                index
+                              }
+                            >
+
+                              <div>
+
+                                <strong>
+                                  {getTrainingName(
+                                    training
+                                  )}
+                                </strong>
+
+                                <span>
+                                  Training enrollment
+                                </span>
+
+                              </div>
+
+                              <span className="welfare-badge">
+                                {getTrainingStatus(
+                                  training
+                                )}
+                              </span>
+
+                            </div>
+
+                          )
+                        )}
+
+                      </div>
+
+                    ) : (
+
+                      <div className="welfare-empty">
+                        No training enrollments found.
+                      </div>
+
+                    )}
+
+                  </section>
+
+                  {/* GOVERNMENT SCHEMES */}
+
+                  <section className="welfare-section">
+
+                    <div className="welfare-section-heading">
+
+                      <div className="welfare-icon">
+                        S
+                      </div>
+
+                      <div>
+                        <h3>
+                          Recommended Schemes
+                        </h3>
+
+                        <p>
+                          Welfare schemes recommended
+                          for this worker
+                        </p>
+                      </div>
+
+                    </div>
+
+                    {Array.isArray(
+                      welfare.recommendedSchemes
+                    ) &&
+                    welfare.recommendedSchemes.length > 0 ? (
+
+                      <div className="welfare-list">
+
+                        {welfare.recommendedSchemes.map(
+                          (scheme, index) => (
+
+                            <div
+                              className="scheme-card"
+                              key={
+                                scheme._id ||
+                                scheme.scheme?._id ||
+                                index
+                              }
+                            >
+
+                              <div className="scheme-card-top">
+
+                                <strong>
+                                  {getSchemeName(
+                                    scheme
+                                  )}
+                                </strong>
+
+                                {scheme.eligible !==
+                                  undefined && (
+                                  <span
+                                    className={
+                                      scheme.eligible
+                                        ? "eligible-badge"
+                                        : "not-eligible-badge"
+                                    }
+                                  >
+                                    {scheme.eligible
+                                      ? "Eligible"
+                                      : "Not Eligible"}
+                                  </span>
+                                )}
+
+                              </div>
+
+                              {getSchemeDescription(
+                                scheme
+                              ) && (
+                                <p>
+                                  {getSchemeDescription(
+                                    scheme
+                                  )}
+                                </p>
+                              )}
+
+                              {Array.isArray(
+                                scheme.reasons
+                              ) &&
+                                scheme.reasons.length >
+                                  0 && (
+
+                                <div className="scheme-reasons">
+
+                                  {scheme.reasons
+                                    .slice(0, 3)
+                                    .map(
+                                      (
+                                        reason,
+                                        reasonIndex
+                                      ) => (
+                                        <span
+                                          key={
+                                            reasonIndex
+                                          }
+                                        >
+                                          {reason}
+                                        </span>
+                                      )
+                                    )}
+
+                                </div>
+                              )}
+
+                            </div>
+
+                          )
+                        )}
+
+                      </div>
+
+                    ) : (
+
+                      <div className="welfare-empty">
+                        No recommended schemes found
+                        for this worker.
+                      </div>
+
+                    )}
+
+                  </section>
+
+                  {/* INSURANCE */}
+
+                  <section className="welfare-section">
+
+                    <div className="welfare-section-heading">
+
+                      <div className="welfare-icon">
+                        +
+                      </div>
+
+                      <div>
+                        <h3>
+                          Insurance
+                        </h3>
+
+                        <p>
+                          Available worker insurance plans
+                        </p>
+                      </div>
+
+                    </div>
+
+                    {Array.isArray(
+                      welfare.insurancePlans
+                    ) &&
+                    welfare.insurancePlans.length > 0 ? (
+
+                      <div className="insurance-grid">
+
+                        {welfare.insurancePlans.map(
+                          (plan, index) => (
+
+                            <div
+                              className="insurance-card"
+                              key={
+                                plan._id ||
+                                index
+                              }
+                            >
+
+                              <div className="insurance-top">
+
+                                <div>
+
+                                  <span>
+                                    {plan.provider ||
+                                      "Insurance Provider"}
+                                  </span>
+
+                                  <strong>
+                                    {plan.planName ||
+                                      "Insurance Plan"}
+                                  </strong>
+
+                                </div>
+
+                                <div className="insurance-mark">
+                                  +
+                                </div>
+
+                              </div>
+
+                              {plan.description && (
+                                <p>
+                                  {plan.description}
+                                </p>
+                              )}
+
+                              <div className="insurance-info">
+
+                                <div>
+                                  <span>
+                                    COVERAGE
+                                  </span>
+
+                                  <strong>
+                                    {formatCurrency(
+                                      plan.coverageAmount
+                                    )}
+                                  </strong>
+                                </div>
+
+                                <div>
+                                  <span>
+                                    PREMIUM
+                                  </span>
+
+                                  <strong>
+                                    {formatCurrency(
+                                      plan.premiumAmount
+                                    )}
+                                  </strong>
+                                </div>
+
+                                <div>
+                                  <span>
+                                    FREQUENCY
+                                  </span>
+
+                                  <strong>
+                                    {plan.premiumFrequency ||
+                                      "N/A"}
+                                  </strong>
+                                </div>
+
+                              </div>
+
+                              {Array.isArray(
+                                plan.benefits
+                              ) &&
+                                plan.benefits.length >
+                                  0 && (
+
+                                <div className="insurance-benefits">
+
+                                  {plan.benefits
+                                    .slice(0, 3)
+                                    .map(
+                                      (
+                                        benefit,
+                                        benefitIndex
+                                      ) => (
+                                        <span
+                                          key={
+                                            benefitIndex
+                                          }
+                                        >
+                                          ✓ {benefit}
+                                        </span>
+                                      )
+                                    )}
+
+                                </div>
+                              )}
+
+                            </div>
+
+                          )
+                        )}
+
+                      </div>
+
+                    ) : (
+
+                      <div className="welfare-empty">
+                        No active insurance plans are
+                        currently available.
+                      </div>
+
+                    )}
+
+                  </section>
+
+                </div>
+              )}
+
+              {/* MODAL FOOTER */}
+
+              <div className="welfare-footer">
+
+                <span>
+                  SAHAAYAK WELFARE SERVICES
+                </span>
+
+                <button
+                  className="welfare-done-btn"
+                  onClick={closeWelfare}
+                >
+                  Close
+                </button>
+
+              </div>
+
+            </div>
+
+          </div>
+        )}
 
       </div>
     </>
@@ -745,6 +1502,10 @@ const styles = `
 .admin-page-new * {
   box-sizing: border-box;
 }
+
+/* =========================
+   HEADER
+========================= */
 
 .admin-topbar {
   height: 78px;
@@ -841,6 +1602,10 @@ const styles = `
   cursor: pointer;
 }
 
+/* =========================
+   MAIN
+========================= */
+
 .admin-main {
   max-width: 1220px;
   margin: auto;
@@ -922,6 +1687,10 @@ const styles = `
   font-weight: 700;
 }
 
+/* =========================
+   STATS
+========================= */
+
 .admin-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1000,6 +1769,10 @@ const styles = `
 .highlight > p {
   color: #dce2df;
 }
+
+/* =========================
+   WORKSPACE
+========================= */
 
 .admin-workspace {
   background: white;
@@ -1104,6 +1877,10 @@ const styles = `
   margin-left: 5px;
   opacity: .7;
 }
+
+/* =========================
+   WORKERS
+========================= */
 
 .admin-workers {
   display: flex;
@@ -1269,10 +2046,15 @@ const styles = `
   color: #999a93 !important;
 }
 
+/* =========================
+   WORKER ACTIONS
+========================= */
+
 .worker-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .worker-actions button {
@@ -1301,10 +2083,24 @@ const styles = `
   color: #767a78;
 }
 
+.welfare-btn {
+  border: 1px solid #cfd8dd;
+  background: #f4f6f6;
+  color: #607589;
+}
+
+.welfare-btn:hover {
+  background: #e9edef;
+}
+
 .worker-actions button:disabled {
   opacity: .55;
   cursor: wait;
 }
+
+/* =========================
+   EMPTY
+========================= */
 
 .admin-empty {
   padding: 55px 20px;
@@ -1338,6 +2134,10 @@ const styles = `
   font-size: 10px;
   margin: 0;
 }
+
+/* =========================
+   NOTE
+========================= */
 
 .admin-note {
   margin-top: 25px;
@@ -1384,6 +2184,10 @@ const styles = `
   margin: 0;
 }
 
+/* =========================
+   FOOTER
+========================= */
+
 .admin-footer {
   padding: 25px 6%;
   border-top: 1px solid #e7e7dc;
@@ -1403,6 +2207,10 @@ const styles = `
 .admin-footer p {
   margin: 0;
 }
+
+/* =========================
+   LOADING
+========================= */
 
 .admin-loading-page {
   min-height: calc(100vh - 72px);
@@ -1449,7 +2257,480 @@ const styles = `
   font-size: 9px;
 }
 
+/* ==================================================
+   WELFARE MODAL
+================================================== */
+
+.welfare-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(48, 55, 58, .48);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 25px;
+}
+
+.welfare-modal {
+  width: min(1000px, 100%);
+  max-height: 90vh;
+  background: #fffffb;
+  border-radius: 20px;
+  border: 1px solid #deded4;
+  box-shadow: 0 25px 70px rgba(40,45,48,.2);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.welfare-header {
+  padding: 23px 27px;
+  border-bottom: 1px solid #e5e5dc;
+  background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.welfare-header h2 {
+  margin: 6px 0 4px;
+  color: #42494d;
+  font-family: 'Poppins', sans-serif;
+  font-size: 21px;
+}
+
+.welfare-header p {
+  margin: 0;
+  color: #96978f;
+  font-size: 10px;
+}
+
+.welfare-close {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #deded5;
+  background: #fafaf6;
+  border-radius: 9px;
+  color: #777b7b;
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.welfare-content {
+  overflow-y: auto;
+  padding: 22px 27px 30px;
+}
+
+.welfare-section {
+  margin-bottom: 27px;
+}
+
+.welfare-section:last-child {
+  margin-bottom: 0;
+}
+
+.welfare-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 13px;
+}
+
+.welfare-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #edf0ef;
+  color: #6d8196;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.welfare-section-heading h3 {
+  margin: 0;
+  color: #555b5d;
+  font-family: 'Poppins', sans-serif;
+  font-size: 14px;
+}
+
+.welfare-section-heading p {
+  margin: 2px 0 0;
+  color: #9a9a92;
+  font-size: 8px;
+}
+
+/* Salary */
+
+.salary-card {
+  border: 1px solid #e3e3d9;
+  background: #fafaf5;
+  border-radius: 13px;
+  padding: 17px;
+}
+
+.salary-card > div:first-child {
+  padding-bottom: 15px;
+  border-bottom: 1px solid #e5e5db;
+}
+
+.salary-card > div:first-child span {
+  display: block;
+  color: #96978f;
+  font-size: 7px;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.salary-card > div:first-child strong {
+  display: block;
+  margin-top: 5px;
+  color: #5e7487;
+  font-family: 'Poppins', sans-serif;
+  font-size: 25px;
+}
+
+.salary-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding-top: 15px;
+}
+
+.salary-details span {
+  display: block;
+  color: #a0a098;
+  font-size: 7px;
+  letter-spacing: .7px;
+  font-weight: 700;
+}
+
+.salary-details strong {
+  display: block;
+  margin-top: 4px;
+  color: #666b6b;
+  font-size: 10px;
+}
+
+.salary-status {
+  text-transform: capitalize;
+  color: #6d806b !important;
+}
+
+/* Welfare lists */
+
+.welfare-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.welfare-list-item {
+  border: 1px solid #e6e6dc;
+  background: white;
+  border-radius: 11px;
+  padding: 13px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+
+.welfare-list-item strong {
+  display: block;
+  color: #5a6061;
+  font-size: 10px;
+}
+
+.welfare-list-item div span {
+  display: block;
+  margin-top: 3px;
+  color: #9a9a92;
+  font-size: 8px;
+}
+
+.welfare-badge {
+  flex-shrink: 0;
+  background: #edf0ef;
+  color: #64798c;
+  border-radius: 20px;
+  padding: 5px 8px;
+  font-size: 7px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.welfare-empty {
+  border: 1px dashed #dcdcd2;
+  border-radius: 11px;
+  padding: 18px;
+  text-align: center;
+  color: #9a9a92;
+  font-size: 9px;
+}
+
+/* Schemes */
+
+.scheme-card {
+  border: 1px solid #e4e4da;
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.scheme-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scheme-card-top strong {
+  color: #575d5f;
+  font-family: 'Poppins', sans-serif;
+  font-size: 10px;
+}
+
+.scheme-card p {
+  margin: 7px 0 0;
+  color: #96978f;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.eligible-badge,
+.not-eligible-badge {
+  flex-shrink: 0;
+  padding: 5px 8px;
+  border-radius: 20px;
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.eligible-badge {
+  background: #e9eee9;
+  color: #647762;
+}
+
+.not-eligible-badge {
+  background: #f3e9e6;
+  color: #806860;
+}
+
+.scheme-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.scheme-reasons span {
+  background: #f2f3ef;
+  color: #777c7a;
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-size: 7px;
+}
+
+/* Insurance */
+
+.insurance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.insurance-card {
+  border: 1px solid #e4e4da;
+  background: white;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.insurance-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.insurance-top span {
+  display: block;
+  color: #96978f;
+  font-size: 7px;
+}
+
+.insurance-top strong {
+  display: block;
+  margin-top: 3px;
+  color: #5a6061;
+  font-family: 'Poppins', sans-serif;
+  font-size: 10px;
+}
+
+.insurance-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #edf0ef;
+  color: #6d8196;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.insurance-card > p {
+  color: #96978f;
+  font-size: 8px;
+  line-height: 1.5;
+  margin: 9px 0;
+}
+
+.insurance-info {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  border-top: 1px solid #eeeeE5;
+  padding-top: 10px;
+}
+
+.insurance-info span {
+  display: block;
+  color: #a0a098;
+  font-size: 6px;
+  letter-spacing: .7px;
+  font-weight: 700;
+}
+
+.insurance-info strong {
+  display: block;
+  color: #666b6b;
+  font-size: 8px;
+  margin-top: 3px;
+}
+
+.insurance-benefits {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insurance-benefits span {
+  color: #777d79;
+  font-size: 7px;
+}
+
+/* Welfare loading */
+
+.welfare-loading {
+  min-height: 330px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.welfare-spinner {
+  width: 45px;
+  height: 45px;
+  border-radius: 13px;
+  background: #6d8196;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.welfare-loading strong {
+  color: #555b5d;
+  font-size: 11px;
+}
+
+.welfare-loading span {
+  color: #999a93;
+  font-size: 8px;
+}
+
+/* Welfare error */
+
+.welfare-error {
+  min-height: 280px;
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.welfare-error > span {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #f3e9e6;
+  color: #806860;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.welfare-error strong {
+  color: #656a69;
+  font-size: 11px;
+}
+
+.welfare-error p {
+  margin: 3px 0 0;
+  color: #999a93;
+  font-size: 8px;
+}
+
+/* Welfare footer */
+
+.welfare-footer {
+  border-top: 1px solid #e5e5dc;
+  background: #fafaf5;
+  padding: 13px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.welfare-footer > span {
+  color: #6d8196;
+  font-size: 7px;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.welfare-done-btn {
+  border: 1px solid #d9d9cf;
+  background: white;
+  color: #6d7473;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+
 @media (max-width: 950px) {
+
   .admin-stats {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1461,9 +2742,18 @@ const styles = `
   .filter-tabs {
     overflow-x: auto;
   }
+
+  .salary-details {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .insurance-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 700px) {
+
   .admin-topbar {
     padding: 0 20px;
   }
@@ -1510,6 +2800,39 @@ const styles = `
 
   .admin-footer {
     padding: 20px;
+  }
+
+  .welfare-overlay {
+    padding: 10px;
+  }
+
+  .welfare-modal {
+    max-height: 95vh;
+    border-radius: 15px;
+  }
+
+  .welfare-header {
+    padding: 18px;
+  }
+
+  .welfare-content {
+    padding: 18px;
+  }
+
+  .salary-details {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .insurance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welfare-footer {
+    padding: 12px 15px;
+  }
+
+  .welfare-footer > span {
+    display: none;
   }
 }
 `;

@@ -5,51 +5,193 @@ import API_URL from "../config/api";
 function WorkerWelfare() {
   const [user, setUser] = useState(null);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const token =
-          localStorage.getItem("sahaayak_token") ||
-          localStorage.getItem("token");
+  const [salary, setSalary] = useState(null);
+  const [salaryHistory, setSalaryHistory] = useState([]);
+  const [trainings, setTrainings] = useState([]);
+  const [schemes, setSchemes] = useState([]);
+  const [insurancePlans, setInsurancePlans] = useState([]);
 
-        if (!token) {
-          return;
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const getToken = () =>
+    localStorage.getItem("sahaayak_token") ||
+    localStorage.getItem("token");
+
+  const authHeaders = () => {
+    const token = getToken();
+
+    return token
+      ? {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         }
+      : {};
+  };
 
-        const response = await fetch(
-          `${API_URL}/api/auth/me`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+  useEffect(() => {
+    loadWelfareData();
+  }, []);
 
-        const data = await response.json();
+  const loadWelfareData = async () => {
+    setLoading(true);
+    setError("");
+
+    const headers = authHeaders();
+
+    if (!headers.Authorization) {
+      setError("Please login as a worker to view welfare information.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const results = await Promise.allSettled([
+        fetch(`${API_URL}/api/auth/me`, {
+          headers,
+        }),
+
+        fetch(`${API_URL}/api/worker-salaries/my`, {
+          headers,
+        }),
+
+        fetch(`${API_URL}/api/worker-salaries/my/history`, {
+          headers,
+        }),
+
+        fetch(`${API_URL}/api/worker-trainings/my`, {
+          headers,
+        }),
+
+        fetch(`${API_URL}/api/schemes/recommended`, {
+          headers,
+        }),
+
+        fetch(`${API_URL}/api/insurance`, {
+          headers,
+        }),
+      ]);
+
+      // USER
+      if (results[0].status === "fulfilled") {
+        const response = results[0].value;
 
         if (response.ok) {
-          setUser(data.user);
-        } else {
-          console.error(
-            "Unable to fetch user:",
-            data.message || "Authentication failed"
+          const data = await response.json();
+          setUser(data.user || null);
+        }
+      }
+
+      // CURRENT SALARY
+      if (results[1].status === "fulfilled") {
+        const response = results[1].value;
+
+        if (response.ok) {
+          const data = await response.json();
+          setSalary(data.salary || null);
+        }
+      }
+
+      // SALARY HISTORY
+      if (results[2].status === "fulfilled") {
+        const response = results[2].value;
+
+        if (response.ok) {
+          const data = await response.json();
+          setSalaryHistory(data.salaries || []);
+        }
+      }
+
+      // TRAININGS
+      if (results[3].status === "fulfilled") {
+        const response = results[3].value;
+
+        if (response.ok) {
+          const data = await response.json();
+          setTrainings(data.trainings || []);
+        }
+      }
+
+      // RECOMMENDED SCHEMES
+      if (results[4].status === "fulfilled") {
+        const response = results[4].value;
+
+        if (response.ok) {
+          const data = await response.json();
+
+          setSchemes(
+            data.schemes ||
+              data.recommendedSchemes ||
+              []
           );
         }
-      } catch (error) {
-        console.error("Worker welfare user error:", error);
       }
-    };
 
-    fetchUser();
-  }, []);
+      // INSURANCE
+      if (results[5].status === "fulfilled") {
+        const response = results[5].value;
+
+        if (response.ok) {
+          const data = await response.json();
+
+          setInsurancePlans(
+            data.insurancePlans ||
+              data.plans ||
+              data.insurance ||
+              []
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Worker welfare error:", err);
+      setError("Unable to load welfare information.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const openLink = (url) => {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) {
+      return "₹0";
+    }
+
+    return `₹${Number(amount).toLocaleString("en-IN")}`;
+  };
+
+  const getTrainingName = (training) => {
+    return (
+      training?.trainingId?.title ||
+      training?.trainingId?.name ||
+      training?.training?.title ||
+      training?.training?.name ||
+      "Training Program"
+    );
+  };
+
+  const getTrainingStatus = (training) => {
+    return (
+      training?.status ||
+      "enrolled"
+    );
+  };
+
+  const getSchemeName = (scheme) => {
+    return (
+      scheme?.name ||
+      scheme?.schemeName ||
+      scheme?.title ||
+      "Government Scheme"
+    );
+  };
+
   return (
     <div className="welfare-page">
 
+      {/* HEADER */}
       <div className="welfare-header">
         <div>
           <p className="welfare-eyebrow">
@@ -59,8 +201,8 @@ function WorkerWelfare() {
           <h1>Worker Welfare & Benefits</h1>
 
           <p>
-            Access government welfare schemes, insurance,
-            pension support and skill-development opportunities.
+            Manage your salary, training, government schemes
+            and insurance benefits in one place.
           </p>
         </div>
 
@@ -77,7 +219,11 @@ function WorkerWelfare() {
 
         <div>
           <span>Worker Profile</span>
-          <h2>{user?.name || "Service Provider"}</h2>
+
+          <h2>
+            {user?.name || "Service Provider"}
+          </h2>
+
           <p>
             {user?.phone || "Registered Sahaayak worker"}
           </p>
@@ -89,224 +235,402 @@ function WorkerWelfare() {
         </div>
       </div>
 
-      {/* BENEFITS */}
+      {loading && (
+        <div className="welfare-card">
+          <h3>Loading welfare information...</h3>
+          <p>
+            Fetching your salary, training, schemes and insurance details.
+          </p>
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="welfare-card">
+          <h3>Unable to load some information</h3>
+          <p>{error}</p>
+
+          <button onClick={loadWelfareData}>
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {/* FINANCIAL OVERVIEW */}
+      {!loading && (
+        <section className="welfare-section">
+
+          <div className="welfare-section-heading">
+            <div>
+              <h2>Financial Overview</h2>
+
+              <p>
+                Your current salary and work-performance information.
+              </p>
+            </div>
+          </div>
+
+          <div className="welfare-grid">
+
+            <div className="welfare-card">
+              <div className="welfare-card-icon">
+                💰
+              </div>
+
+              <h3>Current Salary</h3>
+
+              <p className="welfare-value">
+                {formatCurrency(
+                  salary?.finalSalary ||
+                  salary?.baseSalary
+                )}
+              </p>
+
+              <small>
+                {salary
+                  ? `${salary.month || ""} ${salary.year || ""}`
+                  : "Current month"}
+              </small>
+            </div>
+
+            <div className="welfare-card">
+              <div className="welfare-card-icon">
+                💼
+              </div>
+
+              <h3>Completed Jobs</h3>
+
+              <p className="welfare-value">
+                {salary?.completedJobs || 0}
+              </p>
+
+              <small>
+                Monthly completed services
+              </small>
+            </div>
+
+            <div className="welfare-card">
+              <div className="welfare-card-icon">
+                ⏱️
+              </div>
+
+              <h3>Extra Jobs</h3>
+
+              <p className="welfare-value">
+                {salary?.extraJobs || 0}
+              </p>
+
+              <small>
+                Jobs beyond monthly limit
+              </small>
+            </div>
+
+            <div className="welfare-card">
+              <div className="welfare-card-icon">
+                📈
+              </div>
+
+              <h3>Overtime Pay</h3>
+
+              <p className="welfare-value">
+                {formatCurrency(
+                  salary?.overtimePay
+                )}
+              </p>
+
+              <small>
+                Additional earnings
+              </small>
+            </div>
+
+          </div>
+        </section>
+      )}
+
+      {/* SALARY HISTORY */}
+      {!loading && salaryHistory.length > 0 && (
+        <section className="welfare-section">
+
+          <div className="welfare-section-heading">
+            <div>
+              <h2>Salary History</h2>
+
+              <p>
+                Previous monthly salary records.
+              </p>
+            </div>
+          </div>
+
+          <div className="scheme-list">
+
+            {salaryHistory.map((item, index) => (
+              <div
+                className="scheme-card"
+                key={item._id || index}
+              >
+                <div className="scheme-icon">
+                  💵
+                </div>
+
+                <div className="scheme-content">
+                  <h3>
+                    {item.month || "Month"}{" "}
+                    {item.year || ""}
+                  </h3>
+
+                  <span>
+                    Completed Jobs:{" "}
+                    {item.completedJobs || 0}
+                  </span>
+
+                  <p>
+                    Final Salary:{" "}
+                    <strong>
+                      {formatCurrency(item.finalSalary)}
+                    </strong>
+                  </p>
+                </div>
+
+                <span>
+                  {item.status || "pending"}
+                </span>
+              </div>
+            ))}
+
+          </div>
+        </section>
+      )}
+
+      {/* TRAINING */}
       <section className="welfare-section">
 
         <div className="welfare-section-heading">
           <div>
-            <h2>Worker Support</h2>
+            <h2>My Training</h2>
+
             <p>
-              Important resources for financial security,
-              protection and professional growth.
+              Training programs and skill-development opportunities.
             </p>
           </div>
         </div>
 
-        <div className="welfare-grid">
-
+        {trainings.length === 0 ? (
           <div className="welfare-card">
-            <div className="welfare-card-icon">💰</div>
+            <div className="welfare-card-icon">
+              🎓
+            </div>
 
-            <h3>Financial & Pension</h3>
+            <h3>No Training Enrollments</h3>
 
             <p>
-              Explore pension and financial-security programs
-              available to eligible unorganised workers.
+              You are not enrolled in any training programs yet.
             </p>
-
-            <button
-              onClick={() =>
-                openLink("https://maandhan.in/")
-              }
-            >
-              Explore PM-SYM →
-            </button>
           </div>
+        ) : (
+          <div className="scheme-list">
 
-          <div className="welfare-card">
-            <div className="welfare-card-icon">🏥</div>
+            {trainings.map((training, index) => (
+              <div
+                className="scheme-card"
+                key={training._id || index}
+              >
+                <div className="scheme-icon">
+                  🎓
+                </div>
 
-            <h3>Insurance Protection</h3>
+                <div className="scheme-content">
 
-            <p>
-              Access official information about government
-              accident and life insurance schemes.
-            </p>
+                  <h3>
+                    {getTrainingName(training)}
+                  </h3>
 
-            <button
-              onClick={() =>
-                openLink("https://jansuraksha.gov.in/")
-              }
-            >
-              View Insurance →
-            </button>
+                  <span>
+                    Training Program
+                  </span>
+
+                  <p>
+                    Status:{" "}
+                    <strong>
+                      {getTrainingStatus(training)}
+                    </strong>
+                  </p>
+
+                </div>
+              </div>
+            ))}
+
           </div>
-
-          <div className="welfare-card">
-            <div className="welfare-card-icon">🎓</div>
-
-            <h3>Skill Development</h3>
-
-            <p>
-              Find government-backed courses, certifications
-              and training opportunities.
-            </p>
-
-            <button
-              onClick={() =>
-                openLink(
-                  "https://www.skillindiadigital.gov.in/"
-                )
-              }
-            >
-              Find Training →
-            </button>
-          </div>
-
-          <div className="welfare-card">
-            <div className="welfare-card-icon">📄</div>
-
-            <h3>e-Shram Registration</h3>
-
-            <p>
-              Register or update your profile on the official
-              National Database of Unorganised Workers.
-            </p>
-
-            <button
-              onClick={() =>
-                openLink("https://eshram.gov.in/")
-              }
-            >
-              Visit e-Shram →
-            </button>
-          </div>
-
-        </div>
+        )}
       </section>
 
-      {/* GOVERNMENT SCHEMES */}
+      {/* RECOMMENDED SCHEMES */}
       <section className="welfare-section">
 
         <div className="welfare-section-heading">
           <div>
-            <h2>Government Schemes</h2>
+            <h2>Recommended Government Schemes</h2>
+
             <p>
-              Official resources for commonly relevant worker schemes.
+              Schemes recommended based on your worker profile.
             </p>
           </div>
         </div>
 
-        <div className="scheme-list">
-
-          <div className="scheme-card">
-            <div className="scheme-icon">👴</div>
-
-            <div className="scheme-content">
-              <h3>PM-SYM</h3>
-
-              <span>
-                Pradhan Mantri Shram Yogi Maandhan
-              </span>
-
-              <p>
-                Pension scheme for eligible unorganised workers.
-              </p>
+        {schemes.length === 0 ? (
+          <div className="welfare-card">
+            <div className="welfare-card-icon">
+              🏛️
             </div>
 
-            <button
-              onClick={() =>
-                openLink("https://maandhan.in/")
-              }
-            >
-              Official Site ↗
-            </button>
+            <h3>No Recommendations Available</h3>
+
+            <p>
+              Complete your worker profile to receive more
+              personalized scheme recommendations.
+            </p>
           </div>
+        ) : (
+          <div className="scheme-list">
 
-          <div className="scheme-card">
-            <div className="scheme-icon">🛡️</div>
+            {schemes.map((scheme, index) => (
+              <div
+                className="scheme-card"
+                key={scheme._id || index}
+              >
+                <div className="scheme-icon">
+                  🏛️
+                </div>
 
-            <div className="scheme-content">
-              <h3>PMSBY</h3>
+                <div className="scheme-content">
+                  <h3>
+                    {getSchemeName(scheme)}
+                  </h3>
 
-              <span>
-                Pradhan Mantri Suraksha Bima Yojana
-              </span>
+                  <p>
+                    {scheme.description ||
+                      scheme.details ||
+                      "Government welfare scheme recommended for you."}
+                  </p>
+                </div>
 
-              <p>
-                Government-backed accident insurance scheme.
-              </p>
-            </div>
+                {scheme.applicationUrl && (
+                  <button
+                    onClick={() =>
+                      openLink(scheme.applicationUrl)
+                    }
+                  >
+                    Apply ↗
+                  </button>
+                )}
+              </div>
+            ))}
 
-            <button
-              onClick={() =>
-                openLink("https://jansuraksha.gov.in/")
-              }
-            >
-              Official Site ↗
-            </button>
           </div>
-
-          <div className="scheme-card">
-            <div className="scheme-icon">❤️</div>
-
-            <div className="scheme-content">
-              <h3>PMJJBY</h3>
-
-              <span>
-                Pradhan Mantri Jeevan Jyoti Bima Yojana
-              </span>
-
-              <p>
-                Government-backed life insurance scheme.
-              </p>
-            </div>
-
-            <button
-              onClick={() =>
-                openLink("https://jansuraksha.gov.in/")
-              }
-            >
-              Official Site ↗
-            </button>
-          </div>
-
-          <div className="scheme-card">
-            <div className="scheme-icon">🧑‍🔧</div>
-
-            <div className="scheme-content">
-              <h3>e-Shram</h3>
-
-              <span>
-                National Database of Unorganised Workers
-              </span>
-
-              <p>
-                Registration and worker-support information
-                from the Ministry of Labour & Employment.
-              </p>
-            </div>
-
-            <button
-              onClick={() =>
-                openLink("https://eshram.gov.in/")
-              }
-            >
-              Official Site ↗
-            </button>
-          </div>
-
-        </div>
+        )}
       </section>
 
-      {/* QUICK LINKS */}
+      {/* INSURANCE */}
       <section className="welfare-section">
 
         <div className="welfare-section-heading">
           <div>
-            <h2>Quick Access</h2>
+            <h2>Insurance Protection</h2>
+
             <p>
-              Direct access to official worker resources.
+              Insurance plans available through Sahaayak.
+            </p>
+          </div>
+        </div>
+
+        {insurancePlans.length === 0 ? (
+          <div className="welfare-card">
+
+            <div className="welfare-card-icon">
+              🏥
+            </div>
+
+            <h3>No Insurance Plans Available</h3>
+
+            <p>
+              Insurance plans will appear here when they are
+              made available by the cooperative administration.
+            </p>
+
+          </div>
+        ) : (
+          <div className="welfare-grid">
+
+            {insurancePlans.map((plan, index) => (
+              <div
+                className="welfare-card"
+                key={plan._id || index}
+              >
+
+                <div className="welfare-card-icon">
+                  🛡️
+                </div>
+
+                <h3>
+                  {plan.planName ||
+                    plan.name ||
+                    "Insurance Plan"}
+                </h3>
+
+                <p>
+                  {plan.description ||
+                    "Worker insurance protection plan."}
+                </p>
+
+                {plan.provider && (
+                  <small>
+                    Provider: {plan.provider}
+                  </small>
+                )}
+
+                {plan.coverageAmount && (
+                  <p>
+                    Coverage:{" "}
+                    <strong>
+                      {formatCurrency(plan.coverageAmount)}
+                    </strong>
+                  </p>
+                )}
+
+                {plan.premiumAmount && (
+                  <p>
+                    Premium:{" "}
+                    <strong>
+                      {formatCurrency(plan.premiumAmount)}
+                    </strong>
+                  </p>
+                )}
+
+                {plan.applicationUrl && (
+                  <button
+                    onClick={() =>
+                      openLink(plan.applicationUrl)
+                    }
+                  >
+                    View Plan ↗
+                  </button>
+                )}
+
+              </div>
+            ))}
+
+          </div>
+        )}
+
+      </section>
+
+      {/* GOVERNMENT RESOURCES */}
+      <section className="welfare-section">
+
+        <div className="welfare-section-heading">
+          <div>
+            <h2>Government Resources</h2>
+
+            <p>
+              Official portals for worker welfare and social security.
             </p>
           </div>
         </div>
@@ -322,6 +646,7 @@ function WorkerWelfare() {
 
             <div>
               <strong>e-Shram Portal</strong>
+
               <small>
                 Registration & worker services
               </small>
@@ -341,6 +666,7 @@ function WorkerWelfare() {
 
             <div>
               <strong>Skill India Digital</strong>
+
               <small>
                 Courses & certifications
               </small>
@@ -360,6 +686,7 @@ function WorkerWelfare() {
 
             <div>
               <strong>Jan Suraksha</strong>
+
               <small>
                 Insurance schemes
               </small>
@@ -377,6 +704,7 @@ function WorkerWelfare() {
 
             <div>
               <strong>Maandhan</strong>
+
               <small>
                 Pension & social security
               </small>
@@ -386,6 +714,7 @@ function WorkerWelfare() {
           </button>
 
         </div>
+
       </section>
 
       {/* SUPPORT */}
@@ -399,15 +728,15 @@ function WorkerWelfare() {
           <h2>Need Worker Support?</h2>
 
           <p>
-            For e-Shram assistance, the official portal provides
-            a multilingual helpdesk.
+            Access official government support resources
+            for unorganised workers.
           </p>
         </div>
 
         <button
           onClick={() =>
             openLink(
-              "https://www.eshram.gov.in/helpdesk"
+              "https://eshram.gov.in/"
             )
           }
         >
@@ -417,9 +746,10 @@ function WorkerWelfare() {
       </div>
 
       <p className="welfare-disclaimer">
-        Sahaayak provides links to official government resources.
-        Eligibility, benefits and application requirements are
-        determined by the respective government authorities.
+        Sahaayak provides links to official government
+        resources. Eligibility, benefits and application
+        requirements are determined by the respective
+        authorities.
       </p>
 
     </div>

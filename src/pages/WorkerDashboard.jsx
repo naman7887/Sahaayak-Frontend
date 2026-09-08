@@ -5,11 +5,148 @@ import API_URL from "../config/api";
 function WorkerDashboard() {
   const [worker, setWorker] = useState(null);
   const [bookings, setBookings] = useState([]);
+
+  const [salary, setSalary] = useState(null);
+  const [salaryHistory, setSalaryHistory] = useState([]);
+  const [trainings, setTrainings] = useState([]);
+  const [schemes, setSchemes] = useState([]);
+  const [insurancePlans, setInsurancePlans] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
+  const [welfareLoading, setWelfareLoading] = useState(false);
   const [error, setError] = useState("");
+  const [welfareError, setWelfareError] = useState("");
 
   const token = localStorage.getItem("token");
+
+  const authHeaders = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  const loadWelfareData = async () => {
+    try {
+      setWelfareLoading(true);
+      setWelfareError("");
+
+      const results = await Promise.allSettled([
+        fetch(`${API_URL}/api/worker-salaries/my`, {
+          headers: authHeaders,
+        }),
+
+        fetch(`${API_URL}/api/worker-salaries/my/history`, {
+          headers: authHeaders,
+        }),
+
+        fetch(`${API_URL}/api/worker-trainings/my`, {
+          headers: authHeaders,
+        }),
+
+        fetch(`${API_URL}/api/schemes/recommended`, {
+          headers: authHeaders,
+        }),
+
+        fetch(`${API_URL}/api/insurance`, {
+          headers: authHeaders,
+        }),
+      ]);
+
+      // Salary
+      if (
+        results[0].status === "fulfilled" &&
+        results[0].value.ok
+      ) {
+        const data = await results[0].value.json();
+
+        setSalary(
+          data.salary ||
+            data.data ||
+            data.workerSalary ||
+            null
+        );
+      }
+
+      // Salary history
+      if (
+        results[1].status === "fulfilled" &&
+        results[1].value.ok
+      ) {
+        const data = await results[1].value.json();
+
+        setSalaryHistory(
+          data.salaries ||
+            data.history ||
+            data.data ||
+            []
+        );
+      }
+
+      // Training
+      if (
+        results[2].status === "fulfilled" &&
+        results[2].value.ok
+      ) {
+        const data = await results[2].value.json();
+
+        setTrainings(
+          data.trainings ||
+            data.data ||
+            []
+        );
+      }
+
+      // Schemes
+      if (
+        results[3].status === "fulfilled" &&
+        results[3].value.ok
+      ) {
+        const data = await results[3].value.json();
+
+        setSchemes(
+          data.schemes ||
+            data.recommendedSchemes ||
+            data.data ||
+            []
+        );
+      }
+
+      // Insurance
+      if (
+        results[4].status === "fulfilled" &&
+        results[4].value.ok
+      ) {
+        const data = await results[4].value.json();
+
+        setInsurancePlans(
+          data.insurancePlans ||
+            data.plans ||
+            data.data ||
+            []
+        );
+      }
+
+      const failed = results.some(
+        (result) =>
+          result.status === "rejected" ||
+          (result.status === "fulfilled" &&
+            !result.value.ok)
+      );
+
+      if (failed) {
+        setWelfareError(
+          "Some welfare information could not be loaded."
+        );
+      }
+    } catch (err) {
+      console.error("Welfare loading error:", err);
+
+      setWelfareError(
+        "Unable to load welfare information."
+      );
+    } finally {
+      setWelfareLoading(false);
+    }
+  };
 
   const loadWorkerDashboard = async () => {
     try {
@@ -17,14 +154,11 @@ function WorkerDashboard() {
 
       const [profileRes, bookingsRes] = await Promise.all([
         fetch(`${API_URL}/api/workers/profile`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: authHeaders,
         }),
+
         fetch(`${API_URL}/api/bookings/worker`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: authHeaders,
         }),
       ]);
 
@@ -47,6 +181,8 @@ function WorkerDashboard() {
           bookingsData.data ||
           []
       );
+
+      await loadWelfareData();
     } catch (err) {
       console.error(err);
       setError("Unable to load your dashboard.");
@@ -65,7 +201,11 @@ function WorkerDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  const updateBooking = async (bookingId, action, status = null) => {
+  const updateBooking = async (
+    bookingId,
+    action,
+    status = null
+  ) => {
     try {
       setActionLoading(bookingId);
       setError("");
@@ -100,14 +240,21 @@ function WorkerDashboard() {
       const response = await fetch(url, options);
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || "Action failed");
+        const data = await response
+          .json()
+          .catch(() => ({}));
+
+        throw new Error(
+          data.message || "Action failed"
+        );
       }
 
       await loadWorkerDashboard();
     } catch (err) {
       console.error(err);
-      setError(err.message || "Something went wrong.");
+      setError(
+        err.message || "Something went wrong."
+      );
     } finally {
       setActionLoading("");
     }
@@ -119,7 +266,9 @@ function WorkerDashboard() {
     return bookings.filter((booking) => {
       if (booking.status !== "completed") return false;
 
-      const date = new Date(booking.scheduledDate);
+      const date = new Date(
+        booking.scheduledDate
+      );
 
       return (
         date.getMonth() === now.getMonth() &&
@@ -139,16 +288,25 @@ function WorkerDashboard() {
   );
 
   const pendingBookings = useMemo(
-    () => bookings.filter((booking) => booking.status === "pending"),
+    () =>
+      bookings.filter(
+        (booking) => booking.status === "pending"
+      ),
     [bookings]
   );
 
   const totalEarnings = completedBookings.reduce(
-    (total, booking) => total + Number(booking.price || 0),
+    (total, booking) =>
+      total + Number(booking.price || 0),
     0
   );
 
+  // --------------------------------------------------
+  // SALARY
+  // --------------------------------------------------
+
   const salaryObject =
+    salary ||
     worker?.salary ||
     worker?.salaryDetails ||
     worker?.earnings ||
@@ -170,8 +328,8 @@ function WorkerDashboard() {
 
   const backendFinalSalary =
     salaryObject.finalSalary ??
-    worker?.finalSalary ??
     salaryObject.currentSalary ??
+    worker?.finalSalary ??
     worker?.currentSalary ??
     null;
 
@@ -186,20 +344,33 @@ function WorkerDashboard() {
       ? Number(backendFinalSalary)
       : totalEarnings;
 
-  const monthlyJobsDone = completedBookings.length;
+  const monthlyJobsDone =
+    salaryObject.completedJobs !== undefined
+      ? Number(salaryObject.completedJobs)
+      : completedBookings.length;
 
   const extraJobs =
     backendExtraJobs !== null &&
     backendExtraJobs !== undefined
       ? Number(backendExtraJobs)
       : monthlyJobLimit
-      ? Math.max(monthlyJobsDone - monthlyJobLimit, 0)
+      ? Math.max(
+          monthlyJobsDone - monthlyJobLimit,
+          0
+        )
       : null;
 
   const salaryProgress =
     monthlyJobLimit && monthlyJobLimit > 0
-      ? Math.min((monthlyJobsDone / monthlyJobLimit) * 100, 100)
+      ? Math.min(
+          (monthlyJobsDone / monthlyJobLimit) * 100,
+          100
+        )
       : 0;
+
+  // --------------------------------------------------
+  // WORKER PROFILE
+  // --------------------------------------------------
 
   const rating =
     worker?.rating ??
@@ -219,7 +390,19 @@ function WorkerDashboard() {
     worker.skills.length > 0;
 
   const profileCompleted =
-    hasService && hasSkills && hasLocation;
+    hasService &&
+    hasSkills &&
+    hasLocation;
+
+  // --------------------------------------------------
+  // HELPERS
+  // --------------------------------------------------
+
+  const formatCurrency = (value) => {
+    const amount = Number(value || 0);
+
+    return `₹${amount.toLocaleString("en-IN")}`;
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return "Date not available";
@@ -245,18 +428,30 @@ function WorkerDashboard() {
   };
 
   const getCustomerName = (booking) => {
-    if (booking.customer?.name) return booking.customer.name;
-    if (booking.customer?.user?.name) return booking.customer.user.name;
+    if (booking.customer?.name) {
+      return booking.customer.name;
+    }
+
+    if (booking.customer?.user?.name) {
+      return booking.customer.user.name;
+    }
+
     return "Customer";
   };
 
   const getServiceName = (booking) => {
-    if (booking.service?.name) return booking.service.name;
+    if (booking.service?.name) {
+      return booking.service.name;
+    }
+
     return "Service Request";
   };
 
   const getAddress = (booking) => {
-    if (booking.address) return booking.address;
+    if (booking.address) {
+      return booking.address;
+    }
+
     return "Location provided by customer";
   };
 
@@ -267,13 +462,76 @@ function WorkerDashboard() {
     if (status === "completed") return "Completed";
     if (status === "rejected") return "Rejected";
     if (status === "cancelled") return "Cancelled";
+
     return status || "Unknown";
   };
 
   const getNextStatus = (status) => {
-    if (status === "accepted") return "in_progress";
-    if (status === "in_progress") return "completed";
+    if (status === "accepted") {
+      return "in_progress";
+    }
+
+    if (status === "in_progress") {
+      return "completed";
+    }
+
     return null;
+  };
+
+  const getTrainingName = (training) => {
+    return (
+      training?.trainingProgramId?.title ||
+      training?.trainingProgramId?.name ||
+      training?.trainingProgram?.title ||
+      training?.trainingProgram?.name ||
+      training?.title ||
+      training?.name ||
+      "Training Program"
+    );
+  };
+
+  const getTrainingStatus = (training) => {
+    return (
+      training?.status ||
+      training?.trainingStatus ||
+      "enrolled"
+    );
+  };
+
+  const getSchemeName = (scheme) => {
+    return (
+      scheme?.scheme?.name ||
+      scheme?.scheme?.schemeName ||
+      scheme?.name ||
+      scheme?.schemeName ||
+      "Government Scheme"
+    );
+  };
+
+  const getSchemeDescription = (scheme) => {
+    return (
+      scheme?.scheme?.description ||
+      scheme?.description ||
+      scheme?.scheme?.benefits ||
+      scheme?.benefits ||
+      ""
+    );
+  };
+
+  const getInsuranceName = (plan) => {
+    return (
+      plan?.planName ||
+      plan?.name ||
+      "Insurance Plan"
+    );
+  };
+
+  const getInsuranceProvider = (plan) => {
+    return (
+      plan?.provider ||
+      plan?.insuranceProvider ||
+      "Insurance Provider"
+    );
   };
 
   if (loading) {
@@ -284,7 +542,10 @@ function WorkerDashboard() {
         <main className="modern-worker-page">
           <div className="worker-loading">
             <div className="worker-loader"></div>
-            <p>Loading your dashboard...</p>
+
+            <p>
+              Loading your dashboard...
+            </p>
           </div>
         </main>
       </>
@@ -298,31 +559,48 @@ function WorkerDashboard() {
       <main className="modern-worker-page">
 
         {/* HEADER */}
+
         <header className="worker-topbar">
+
           <div>
-            <p className="worker-eyebrow">WORKER DASHBOARD</p>
+
+            <p className="worker-eyebrow">
+              WORKER DASHBOARD
+            </p>
 
             <h1>
               Good morning
-              {worker?.user?.name || worker?.name
-                ? `, ${worker?.user?.name || worker?.name}`
+              {worker?.user?.name ||
+              worker?.name
+                ? `, ${
+                    worker?.user?.name ||
+                    worker?.name
+                  }`
                 : ""}
               .
             </h1>
 
             <p className="worker-subtitle">
-              Here's what's happening with your work today.
+              Here's what's happening with
+              your work today.
             </p>
+
           </div>
 
           <div
             className={`availability-pill ${
-              worker?.availability ? "available" : "offline"
+              worker?.availability
+                ? "available"
+                : "offline"
             }`}
           >
             <span></span>
-            {worker?.availability ? "Available for work" : "Currently offline"}
+
+            {worker?.availability
+              ? "Available for work"
+              : "Currently offline"}
           </div>
+
         </header>
 
         {error && (
@@ -332,44 +610,65 @@ function WorkerDashboard() {
         )}
 
         {/* SUMMARY CARDS */}
+
         <section className="worker-summary-grid">
 
           <div className="worker-stat-card primary-stat">
+
             <div className="stat-top">
               <span>ACTIVE JOBS</span>
-              <span className="stat-symbol">↗</span>
+              <span className="stat-symbol">
+                ↗
+              </span>
             </div>
 
-            <strong>{activeBookings.length}</strong>
+            <strong>
+              {activeBookings.length}
+            </strong>
 
             <p>
               {activeBookings.length === 1
                 ? "Job currently in progress"
                 : "Jobs currently in progress"}
             </p>
+
           </div>
 
           <div className="worker-stat-card">
+
             <div className="stat-top">
-              <span>MONTHLY JOBS DONE</span>
-              <span className="stat-symbol">✓</span>
+              <span>
+                MONTHLY JOBS DONE
+              </span>
+
+              <span className="stat-symbol">
+                ✓
+              </span>
             </div>
 
-            <strong>{monthlyJobsDone}</strong>
+            <strong>
+              {monthlyJobsDone}
+            </strong>
 
             <p>
               Completed this month
             </p>
+
           </div>
 
           <div className="worker-stat-card">
+
             <div className="stat-top">
               <span>RATING</span>
-              <span className="stat-symbol">★</span>
+
+              <span className="stat-symbol">
+                ★
+              </span>
             </div>
 
             <strong>
-              {rating !== null && rating !== undefined
+              {rating !== null &&
+              rating !== undefined
                 ? Number(rating).toFixed(1)
                 : "—"}
             </strong>
@@ -377,65 +676,94 @@ function WorkerDashboard() {
             <p>
               Based on customer feedback
             </p>
+
           </div>
 
           <div className="worker-stat-card">
+
             <div className="stat-top">
-              <span>MONTHLY EARNINGS</span>
-              <span className="stat-symbol">₹</span>
+              <span>
+                MONTHLY EARNINGS
+              </span>
+
+              <span className="stat-symbol">
+                ₹
+              </span>
             </div>
 
             <strong>
-              ₹{totalEarnings.toLocaleString("en-IN")}
+              {formatCurrency(
+                currentSalary
+              )}
             </strong>
 
             <p>
-              From completed services
+              Current salary estimate
             </p>
+
           </div>
 
         </section>
 
         {/* SALARY + PROFILE */}
+
         <section className="worker-middle-grid">
 
           {/* SALARY CAP */}
+
           <div className="salary-cap-card">
 
             <div className="salary-heading">
+
               <div>
-                <p className="section-label">SALARY CAP</p>
-                <h2>Monthly earnings overview</h2>
+
+                <p className="section-label">
+                  SALARY & WELFARE
+                </p>
+
+                <h2>
+                  Monthly earnings overview
+                </h2>
+
               </div>
 
               <div className="salary-icon">
                 ₹
               </div>
+
             </div>
 
             <div className="salary-main">
 
               <div>
+
                 <span className="salary-small-label">
-                  CURRENT ESTIMATED SALARY
+                  CURRENT SALARY
                 </span>
 
                 <strong className="salary-value">
-                  ₹{currentSalary.toLocaleString("en-IN")}
+                  {formatCurrency(
+                    currentSalary
+                  )}
                 </strong>
+
               </div>
 
               <div className="salary-cap-value">
-                <span>Salary Cap</span>
+
+                <span>
+                  Salary Cap
+                </span>
 
                 <strong>
                   {salaryCap !== null &&
                   salaryCap !== undefined
-                    ? `₹${Number(salaryCap).toLocaleString(
-                        "en-IN"
-                      )}`
+                    ? formatCurrency(
+                        salaryCap
+                      )
                     : "Configured by Sahaayak"}
                 </strong>
+
               </div>
 
             </div>
@@ -443,21 +771,27 @@ function WorkerDashboard() {
             <div className="salary-progress-area">
 
               <div className="salary-progress-header">
-                <span>Monthly Jobs Done</span>
+
+                <span>
+                  Monthly Jobs Done
+                </span>
 
                 <strong>
                   {monthlyJobLimit
                     ? `${monthlyJobsDone} / ${monthlyJobLimit}`
                     : `${monthlyJobsDone}`}
                 </strong>
+
               </div>
 
               <div className="salary-progress">
+
                 <div
                   style={{
                     width: `${salaryProgress}%`,
                   }}
                 ></div>
+
               </div>
 
               <div className="salary-bottom">
@@ -474,7 +808,9 @@ function WorkerDashboard() {
                   extraJobs > 0 && (
                     <span className="extra-jobs">
                       +{extraJobs} extra{" "}
-                      {extraJobs === 1 ? "job" : "jobs"}
+                      {extraJobs === 1
+                        ? "job"
+                        : "jobs"}
                     </span>
                   )}
 
@@ -485,6 +821,7 @@ function WorkerDashboard() {
           </div>
 
           {/* PROFILE */}
+
           <section className="worker-profile-card">
 
             <div className="profile-card-icon">
@@ -497,11 +834,14 @@ function WorkerDashboard() {
                 PROFESSIONAL PROFILE
               </p>
 
-              <h2>My Worker Profile</h2>
+              <h2>
+                My Worker Profile
+              </h2>
 
               <p>
-                Manage your service, skills, location and
-                professional information.
+                Manage your service, skills,
+                location and professional
+                information.
               </p>
 
               <Link
@@ -519,6 +859,7 @@ function WorkerDashboard() {
         </section>
 
         {/* PROFILE WARNING */}
+
         {!profileCompleted && (
           <section className="profile-warning">
 
@@ -527,12 +868,17 @@ function WorkerDashboard() {
             </div>
 
             <div className="warning-content">
-              <strong>Complete your worker profile</strong>
+
+              <strong>
+                Complete your worker profile
+              </strong>
 
               <p>
-                Add your service, skills and location so
-                Sahaayak can match you with nearby jobs.
+                Add your service, skills and
+                location so Sahaayak can match
+                you with nearby jobs.
               </p>
+
             </div>
 
             <Link
@@ -545,17 +891,368 @@ function WorkerDashboard() {
           </section>
         )}
 
+        {/* ==================================================
+            WORKER WELFARE
+        ================================================== */}
+
+        <section className="worker-welfare-section">
+
+          <div className="section-header">
+
+            <div>
+
+              <p className="section-label">
+                WORKER WELFARE
+              </p>
+
+              <h2>
+                Your benefits & support
+              </h2>
+
+            </div>
+
+            <Link
+              to="/worker-welfare"
+              className="welfare-view-all"
+            >
+              View Full Welfare →
+            </Link>
+
+          </div>
+
+          {welfareError && (
+            <div className="welfare-warning">
+              {welfareError}
+            </div>
+          )}
+
+          {welfareLoading ? (
+
+            <div className="welfare-loading-card">
+
+              <div className="welfare-loader">
+                S
+              </div>
+
+              <div>
+                <strong>
+                  Loading welfare information...
+                </strong>
+
+                <span>
+                  Fetching your salary,
+                  training and benefits.
+                </span>
+              </div>
+
+            </div>
+
+          ) : (
+
+            <div className="welfare-grid">
+
+              {/* SALARY */}
+
+              <div className="welfare-card">
+
+                <div className="welfare-card-top">
+
+                  <div className="welfare-card-icon">
+                    ₹
+                  </div>
+
+                  <span className="welfare-card-label">
+                    SALARY
+                  </span>
+
+                </div>
+
+                <strong className="welfare-big-value">
+                  {formatCurrency(
+                    salary?.finalSalary ??
+                      currentSalary
+                  )}
+                </strong>
+
+                <p>
+                  {salary?.status
+                    ? `Status: ${salary.status}`
+                    : "Current monthly salary"}
+                </p>
+
+                <div className="welfare-mini-grid">
+
+                  <div>
+                    <span>
+                      BASE
+                    </span>
+
+                    <strong>
+                      {formatCurrency(
+                        salary?.baseSalary
+                      )}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>
+                      BONUS
+                    </span>
+
+                    <strong>
+                      {formatCurrency(
+                        salary?.performanceBonus
+                      )}
+                    </strong>
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* TRAINING */}
+
+              <div className="welfare-card">
+
+                <div className="welfare-card-top">
+
+                  <div className="welfare-card-icon">
+                    ✓
+                  </div>
+
+                  <span className="welfare-card-label">
+                    TRAINING
+                  </span>
+
+                </div>
+
+                <strong className="welfare-big-value">
+                  {trainings.length}
+                </strong>
+
+                <p>
+                  Training program
+                  {trainings.length === 1
+                    ? ""
+                    : "s"} enrolled
+                </p>
+
+                {trainings.length > 0 && (
+                  <div className="welfare-preview">
+
+                    {trainings
+                      .slice(0, 2)
+                      .map(
+                        (training, index) => (
+                          <span
+                            key={
+                              training._id ||
+                              index
+                            }
+                          >
+                            {getTrainingName(
+                              training
+                            )}
+                          </span>
+                        )
+                      )}
+
+                  </div>
+                )}
+
+              </div>
+
+              {/* SCHEMES */}
+
+              <div className="welfare-card">
+
+                <div className="welfare-card-top">
+
+                  <div className="welfare-card-icon">
+                    S
+                  </div>
+
+                  <span className="welfare-card-label">
+                    SCHEMES
+                  </span>
+
+                </div>
+
+                <strong className="welfare-big-value">
+                  {schemes.length}
+                </strong>
+
+                <p>
+                  Recommended welfare
+                  scheme
+                  {schemes.length === 1
+                    ? ""
+                    : "s"}
+                </p>
+
+                {schemes.length > 0 && (
+                  <div className="welfare-preview">
+
+                    {schemes
+                      .slice(0, 2)
+                      .map(
+                        (scheme, index) => (
+                          <span
+                            key={
+                              scheme._id ||
+                              index
+                            }
+                          >
+                            {getSchemeName(
+                              scheme
+                            )}
+                          </span>
+                        )
+                      )}
+
+                  </div>
+                )}
+
+              </div>
+
+              {/* INSURANCE */}
+
+              <div className="welfare-card">
+
+                <div className="welfare-card-top">
+
+                  <div className="welfare-card-icon">
+                    +
+                  </div>
+
+                  <span className="welfare-card-label">
+                    INSURANCE
+                  </span>
+
+                </div>
+
+                <strong className="welfare-big-value">
+                  {insurancePlans.length}
+                </strong>
+
+                <p>
+                  Insurance plan
+                  {insurancePlans.length === 1
+                    ? ""
+                    : "s"} available
+                </p>
+
+                {insurancePlans.length > 0 && (
+                  <div className="welfare-preview">
+
+                    {insurancePlans
+                      .slice(0, 2)
+                      .map(
+                        (plan, index) => (
+                          <span
+                            key={
+                              plan._id ||
+                              index
+                            }
+                          >
+                            {getInsuranceName(
+                              plan
+                            )}
+                          </span>
+                        )
+                      )}
+
+                  </div>
+                )}
+
+              </div>
+
+            </div>
+
+          )}
+
+        </section>
+
+        {/* SALARY HISTORY */}
+
+        {salaryHistory.length > 0 && (
+          <section className="salary-history-section">
+
+            <div className="section-header">
+
+              <div>
+
+                <p className="section-label">
+                  PAYMENT HISTORY
+                </p>
+
+                <h2>
+                  Recent salary records
+                </h2>
+
+              </div>
+
+            </div>
+
+            <div className="salary-history-list">
+
+              {salaryHistory
+                .slice(0, 5)
+                .map((record, index) => (
+
+                  <div
+                    className="salary-history-row"
+                    key={
+                      record._id || index
+                    }
+                  >
+
+                    <div>
+
+                      <strong>
+                        {record.month || "Month"}{" "}
+                        {record.year || ""}
+                      </strong>
+
+                      <span>
+                        {record.status
+                          ? record.status
+                          : "Salary record"}
+                      </span>
+
+                    </div>
+
+                    <strong>
+                      {formatCurrency(
+                        record.finalSalary
+                      )}
+                    </strong>
+
+                  </div>
+
+                ))}
+
+            </div>
+
+          </section>
+        )}
+
         {/* REQUESTS */}
+
         <section className="requests-section">
 
           <div className="section-header">
 
             <div>
+
               <p className="section-label">
                 WORK QUEUE
               </p>
 
-              <h2>Current Requests</h2>
+              <h2>
+                Current Requests
+              </h2>
+
             </div>
 
             <span className="request-count">
@@ -568,140 +1265,123 @@ function WorkerDashboard() {
 
           {pendingBookings.length === 0 &&
           activeBookings.length === 0 ? (
+
             <div className="empty-requests">
 
               <div className="empty-icon">
                 ✓
               </div>
 
-              <h3>No active requests</h3>
+              <h3>
+                No active requests
+              </h3>
 
               <p>
-                New service requests assigned to you
-                will appear here.
+                New service requests assigned
+                to you will appear here.
               </p>
 
             </div>
+
           ) : (
+
             <div className="booking-list">
 
-              {[...pendingBookings, ...activeBookings].map(
-                (booking) => {
+              {[
+                ...pendingBookings,
+                ...activeBookings,
+              ].map((booking) => {
 
-                  const nextStatus =
-                    getNextStatus(booking.status);
+                const nextStatus =
+                  getNextStatus(
+                    booking.status
+                  );
 
-                  return (
-                    <article
-                      className="worker-booking-card"
-                      key={booking._id}
-                    >
+                return (
+                  <article
+                    className="worker-booking-card"
+                    key={booking._id}
+                  >
 
-                      <div className="booking-main">
+                    <div className="booking-main">
 
-                        <div className="booking-title-row">
+                      <div className="booking-title-row">
 
-                          <h3>
-                            {getServiceName(booking)}
-                          </h3>
+                        <h3>
+                          {getServiceName(
+                            booking
+                          )}
+                        </h3>
 
-                          <span
-                            className={`booking-status ${booking.status}`}
-                          >
-                            <span></span>
-                            {getStatusLabel(
-                              booking.status
-                            )}
-                          </span>
+                        <span
+                          className={`booking-status ${booking.status}`}
+                        >
+                          <span></span>
 
-                        </div>
-
-                        <div className="booking-meta">
-
-                          <span>
-                            👤 {getCustomerName(booking)}
-                          </span>
-
-                          <span>
-                            📅{" "}
-                            {formatDate(
-                              booking.scheduledDate
-                            )}
-                          </span>
-
-                          <span>
-                            ⏰{" "}
-                            {formatTime(
-                              booking.scheduledDate
-                            )}
-                          </span>
-
-                        </div>
-
-                        <div className="booking-address">
-                          <span>📍</span>
-
-                          <span>
-                            {getAddress(booking)}
-                          </span>
-                        </div>
+                          {getStatusLabel(
+                            booking.status
+                          )}
+                        </span>
 
                       </div>
 
-                      <div className="booking-side">
+                      <div className="booking-meta">
 
-                        <strong className="booking-price">
-                          ₹
-                          {Number(
-                            booking.price || 0
-                          ).toLocaleString("en-IN")}
-                        </strong>
-
-                        <div className="booking-actions">
-
-                          {booking.status ===
-                            "pending" && (
-                            <>
-                              <button
-                                className="booking-button accept"
-                                disabled={
-                                  actionLoading ===
-                                  booking._id
-                                }
-                                onClick={() =>
-                                  updateBooking(
-                                    booking._id,
-                                    "accept"
-                                  )
-                                }
-                              >
-                                {actionLoading ===
-                                booking._id
-                                  ? "..."
-                                  : "Accept"}
-                              </button>
-
-                              <button
-                                className="booking-button reject"
-                                disabled={
-                                  actionLoading ===
-                                  booking._id
-                                }
-                                onClick={() =>
-                                  updateBooking(
-                                    booking._id,
-                                    "reject"
-                                  )
-                                }
-                              >
-                                Reject
-                              </button>
-                            </>
+                        <span>
+                          👤{" "}
+                          {getCustomerName(
+                            booking
                           )}
+                        </span>
 
-                          {nextStatus && (
+                        <span>
+                          📅{" "}
+                          {formatDate(
+                            booking.scheduledDate
+                          )}
+                        </span>
+
+                        <span>
+                          ⏰{" "}
+                          {formatTime(
+                            booking.scheduledDate
+                          )}
+                        </span>
+
+                      </div>
+
+                      <div className="booking-address">
+
+                        <span>
+                          📍
+                        </span>
+
+                        <span>
+                          {getAddress(
+                            booking
+                          )}
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                    <div className="booking-side">
+
+                      <strong className="booking-price">
+                        {formatCurrency(
+                          booking.price
+                        )}
+                      </strong>
+
+                      <div className="booking-actions">
+
+                        {booking.status ===
+                          "pending" && (
+                          <>
+
                             <button
-                              className="booking-button update"
+                              className="booking-button accept"
                               disabled={
                                 actionLoading ===
                                 booking._id
@@ -709,29 +1389,67 @@ function WorkerDashboard() {
                               onClick={() =>
                                 updateBooking(
                                   booking._id,
-                                  "status",
-                                  nextStatus
+                                  "accept"
                                 )
                               }
                             >
                               {actionLoading ===
                               booking._id
-                                ? "Updating..."
-                                : nextStatus ===
-                                  "in_progress"
-                                ? "Start Job →"
-                                : "Mark Complete →"}
+                                ? "..."
+                                : "Accept"}
                             </button>
-                          )}
 
-                        </div>
+                            <button
+                              className="booking-button reject"
+                              disabled={
+                                actionLoading ===
+                                booking._id
+                              }
+                              onClick={() =>
+                                updateBooking(
+                                  booking._id,
+                                  "reject"
+                                )
+                              }
+                            >
+                              Reject
+                            </button>
+
+                          </>
+                        )}
+
+                        {nextStatus && (
+                          <button
+                            className="booking-button update"
+                            disabled={
+                              actionLoading ===
+                              booking._id
+                            }
+                            onClick={() =>
+                              updateBooking(
+                                booking._id,
+                                "status",
+                                nextStatus
+                              )
+                            }
+                          >
+                            {actionLoading ===
+                            booking._id
+                              ? "Updating..."
+                              : nextStatus ===
+                                "in_progress"
+                              ? "Start Job →"
+                              : "Mark Complete →"}
+                          </button>
+                        )}
 
                       </div>
 
-                    </article>
-                  );
-                }
-              )}
+                    </div>
+
+                  </article>
+                );
+              })}
 
             </div>
           )}
@@ -739,47 +1457,61 @@ function WorkerDashboard() {
         </section>
 
         {/* COMPLETED WORK */}
+
         <section className="completed-section">
 
           <div className="section-header">
 
             <div>
+
               <p className="section-label">
                 RECENT WORK
               </p>
 
-              <h2>Completed Services</h2>
+              <h2>
+                Completed Services
+              </h2>
+
             </div>
 
             <span className="completed-total">
-              {completedBookings.length} this month
+              {completedBookings.length}{" "}
+              this month
             </span>
 
           </div>
 
           {completedBookings.length === 0 ? (
+
             <div className="simple-empty">
               No completed services this month yet.
             </div>
+
           ) : (
+
             <div className="completed-list">
 
               {completedBookings
                 .slice(0, 5)
                 .map((booking) => (
+
                   <div
                     className="completed-row"
                     key={booking._id}
                   >
 
                     <div className="completed-service">
+
                       <div className="completed-check">
                         ✓
                       </div>
 
                       <div>
+
                         <strong>
-                          {getServiceName(booking)}
+                          {getServiceName(
+                            booking
+                          )}
                         </strong>
 
                         <span>
@@ -787,40 +1519,48 @@ function WorkerDashboard() {
                             booking.scheduledDate
                           )}
                         </span>
+
                       </div>
+
                     </div>
 
                     <strong className="completed-price">
-                      +₹
-                      {Number(
-                        booking.price || 0
-                      ).toLocaleString("en-IN")}
+                      +{formatCurrency(
+                        booking.price
+                      )}
                     </strong>
 
                   </div>
+
                 ))}
 
             </div>
+
           )}
 
         </section>
 
-        {/* WELFARE */}
+        {/* SUPPORT */}
+
         <section className="worker-support">
 
           <div>
+
             <p className="section-label">
               WORKER SUPPORT
             </p>
 
             <h2>
-              Need help or want to know your benefits?
+              Need help or want to know
+              your benefits?
             </h2>
 
             <p>
-              Access welfare programs, worker resources
-              and official government information.
+              Access welfare programs,
+              worker resources and official
+              government information.
             </p>
+
           </div>
 
           <Link
@@ -833,11 +1573,16 @@ function WorkerDashboard() {
         </section>
 
         <footer className="worker-footer">
-          <span>SAHAAYAK</span>
+
           <span>
-            Connecting local workers with meaningful
-            opportunities.
+            SAHAAYAK
           </span>
+
+          <span>
+            Connecting local workers with
+            meaningful opportunities.
+          </span>
+
         </footer>
 
       </main>
@@ -920,7 +1665,8 @@ const styles = `
   background: #6f9678;
 }
 
-.worker-error {
+.worker-error,
+.welfare-warning {
   max-width: 1250px;
   margin: 0 auto 20px;
   padding: 13px 16px;
@@ -1182,7 +1928,8 @@ const styles = `
 
 .profile-card-button,
 .warning-button,
-.support-button {
+.support-button,
+.welfare-view-all {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1193,7 +1940,8 @@ const styles = `
   font-weight: 700;
 }
 
-.profile-card-button {
+.profile-card-button,
+.welfare-view-all {
   color: #6d8196;
 }
 
@@ -1252,6 +2000,207 @@ const styles = `
   background: #6d8196;
   color: white;
 }
+
+/* =========================
+   WELFARE
+========================= */
+
+.worker-welfare-section,
+.salary-history-section {
+  max-width: 1250px;
+  margin: 55px auto 0;
+}
+
+.welfare-view-all {
+  white-space: nowrap;
+}
+
+.welfare-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.welfare-card {
+  min-height: 205px;
+  padding: 20px;
+  border: 1px solid #e3e2d8;
+  border-radius: 17px;
+  background: white;
+  box-shadow: 0 8px 25px rgba(74,74,74,.035);
+}
+
+.welfare-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.welfare-card-icon {
+  width: 35px;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: #edf0ef;
+  color: #6d8196;
+  font-weight: 800;
+}
+
+.welfare-card-label {
+  color: #9a9e9d;
+  font-size: 8px;
+  letter-spacing: 1.1px;
+  font-weight: 800;
+}
+
+.welfare-big-value {
+  display: block;
+  margin-top: 22px;
+  color: #4c555a;
+  font-family: 'Poppins', sans-serif;
+  font-size: 27px;
+}
+
+.welfare-card > p {
+  margin: 5px 0 0;
+  color: #92989a;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.welfare-mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.welfare-mini-grid div {
+  padding: 8px;
+  border-radius: 8px;
+  background: #fafaf5;
+}
+
+.welfare-mini-grid span {
+  display: block;
+  color: #a0a098;
+  font-size: 6px;
+  letter-spacing: .8px;
+  font-weight: 800;
+}
+
+.welfare-mini-grid strong {
+  display: block;
+  margin-top: 3px;
+  color: #687176;
+  font-size: 9px;
+}
+
+.welfare-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 14px;
+}
+
+.welfare-preview span {
+  overflow: hidden;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: #f3f4ef;
+  color: #737b7d;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.welfare-loading-card {
+  min-height: 130px;
+  padding: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 13px;
+  border: 1px solid #e3e2d8;
+  border-radius: 17px;
+  background: white;
+}
+
+.welfare-loader {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #6d8196;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 700;
+}
+
+.welfare-loading-card strong {
+  display: block;
+  color: #596165;
+  font-size: 10px;
+}
+
+.welfare-loading-card span {
+  display: block;
+  margin-top: 4px;
+  color: #999e9f;
+  font-size: 8px;
+}
+
+/* =========================
+   SALARY HISTORY
+========================= */
+
+.salary-history-list {
+  border: 1px solid #e3e2d8;
+  border-radius: 17px;
+  background: white;
+  overflow: hidden;
+}
+
+.salary-history-row {
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #eeeeE7;
+}
+
+.salary-history-row:last-child {
+  border-bottom: none;
+}
+
+.salary-history-row div strong {
+  display: block;
+  color: #5b6265;
+  font-size: 10px;
+}
+
+.salary-history-row div span {
+  display: block;
+  margin-top: 4px;
+  color: #989d9d;
+  font-size: 8px;
+  text-transform: capitalize;
+}
+
+.salary-history-row > strong {
+  color: #687d70;
+  font-family: 'Poppins', sans-serif;
+  font-size: 12px;
+}
+
+/* =========================
+   REQUESTS
+========================= */
 
 .requests-section,
 .completed-section {
@@ -1418,7 +2367,6 @@ const styles = `
   font-family: 'Inter', sans-serif;
   font-size: 10px;
   font-weight: 700;
-  transition: .2s ease;
 }
 
 .booking-button:disabled {
@@ -1426,29 +2374,16 @@ const styles = `
   cursor: not-allowed;
 }
 
-.booking-button.accept {
+.booking-button.accept,
+.booking-button.update {
   background: #6d8196;
   color: white;
-}
-
-.booking-button.accept:hover {
-  background: #5e7185;
 }
 
 .booking-button.reject {
   border-color: #ddd9d2;
   background: white;
   color: #7b7e7e;
-}
-
-.booking-button.reject:hover {
-  background: #f8f7f1;
-}
-
-.booking-button.update {
-  background: #6d8196;
-  color: white;
-  min-width: 125px;
 }
 
 .empty-requests,
@@ -1628,6 +2563,7 @@ const styles = `
 }
 
 @media (max-width: 1050px) {
+
   .worker-summary-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1635,9 +2571,14 @@ const styles = `
   .worker-middle-grid {
     grid-template-columns: 1fr;
   }
+
+  .welfare-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 700px) {
+
   .modern-worker-page {
     padding: 28px 18px;
   }
@@ -1651,7 +2592,8 @@ const styles = `
     margin-top: 0;
   }
 
-  .worker-summary-grid {
+  .worker-summary-grid,
+  .welfare-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1730,6 +2672,10 @@ const styles = `
 
   .worker-footer {
     flex-direction: column;
+  }
+
+  .salary-history-row {
+    align-items: flex-start;
   }
 }
 `;
