@@ -1,3 +1,4 @@
+import API_URL from "../config/api";
 import { useEffect, useState } from "react";
 
 function Navbar() {
@@ -16,7 +17,7 @@ function Navbar() {
 
     try {
       const response = await fetch(
-        "http://localhost:5000/api/auth/me",
+        `${API_URL}/api/auth/me`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -44,7 +45,7 @@ function Navbar() {
       setNotificationLoading(true);
 
       const response = await fetch(
-        "http://localhost:5000/api/notifications",
+        `${API_URL}/api/notifications`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -84,7 +85,7 @@ function Navbar() {
   const markNotificationRead = async (notificationId) => {
     try {
       await fetch(
-        `http://localhost:5000/api/notifications/${notificationId}/read`,
+        `${API_URL}/api/notifications/${notificationId}/read`,
         {
           method: "PATCH",
           headers: {
@@ -114,7 +115,7 @@ function Navbar() {
   const markAllRead = async () => {
     try {
       const response = await fetch(
-        "http://localhost:5000/api/notifications/read-all",
+        `${API_URL}/api/notifications/read-all`,
         {
           method: "PATCH",
           headers: {
@@ -219,7 +220,6 @@ function Navbar() {
 
   return (
     <nav className="navbar">
-
       <div
         className="logo"
         onClick={() => {
@@ -238,14 +238,10 @@ function Navbar() {
       </div>
 
       <div className="nav-buttons">
-
         {user ? (
           <>
-
             {/* NOTIFICATION BELL */}
-
             <div className="notification-wrapper">
-
               <button
                 className="notification-bell"
                 onClick={() => {
@@ -271,9 +267,7 @@ function Navbar() {
 
               {showNotifications && (
                 <div className="notification-dropdown">
-
                   <div className="notification-header">
-
                     <div>
                       <strong>
                         Notifications
@@ -294,11 +288,9 @@ function Navbar() {
                         Mark all read
                       </button>
                     )}
-
                   </div>
 
                   <div className="notification-list">
-
                     {notificationLoading ? (
                       <div className="notification-empty">
                         Loading...
@@ -332,7 +324,6 @@ function Navbar() {
                               )
                             }
                           >
-
                             <div className="notification-icon">
                               {getNotificationIcon(
                                 notification.type
@@ -340,7 +331,6 @@ function Navbar() {
                             </div>
 
                             <div className="notification-content">
-
                               <strong>
                                 {notification.title}
                               </strong>
@@ -354,22 +344,17 @@ function Navbar() {
                                   notification.createdAt
                                 )}
                               </small>
-
                             </div>
 
                             {!notification.isRead && (
                               <span className="unread-dot" />
                             )}
-
                           </button>
                         ))
                     )}
-
                   </div>
-
                 </div>
               )}
-
             </div>
 
             <a
@@ -391,7 +376,6 @@ function Navbar() {
             >
               Logout
             </button>
-
           </>
         ) : (
           <>
@@ -410,9 +394,7 @@ function Navbar() {
             </a>
           </>
         )}
-
       </div>
-
     </nav>
   );
 }

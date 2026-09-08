@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import "./WorkerWelfare.css";
+import API_URL from "../config/api";
 
 function WorkerWelfare() {
   const [user, setUser] = useState(null);
@@ -7,10 +8,16 @@ function WorkerWelfare() {
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const token = localStorage.getItem("token");
+        const token =
+          localStorage.getItem("sahaayak_token") ||
+          localStorage.getItem("token");
+
+        if (!token) {
+          return;
+        }
 
         const response = await fetch(
-          "http://localhost:5000/api/auth/me",
+          `${API_URL}/api/auth/me`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -22,9 +29,14 @@ function WorkerWelfare() {
 
         if (response.ok) {
           setUser(data.user);
+        } else {
+          console.error(
+            "Unable to fetch user:",
+            data.message || "Authentication failed"
+          );
         }
       } catch (error) {
-        console.error(error);
+        console.error("Worker welfare user error:", error);
       }
     };
 
@@ -142,7 +154,9 @@ function WorkerWelfare() {
 
             <button
               onClick={() =>
-                openLink("https://www.skillindiadigital.gov.in/")
+                openLink(
+                  "https://www.skillindiadigital.gov.in/"
+                )
               }
             >
               Find Training →
@@ -305,36 +319,52 @@ function WorkerWelfare() {
             }
           >
             <span>📋</span>
+
             <div>
               <strong>e-Shram Portal</strong>
-              <small>Registration & worker services</small>
+              <small>
+                Registration & worker services
+              </small>
             </div>
+
             <b>↗</b>
           </button>
 
           <button
             onClick={() =>
-              openLink("https://www.skillindiadigital.gov.in/")
+              openLink(
+                "https://www.skillindiadigital.gov.in/"
+              )
             }
           >
             <span>🎓</span>
+
             <div>
               <strong>Skill India Digital</strong>
-              <small>Courses & certifications</small>
+              <small>
+                Courses & certifications
+              </small>
             </div>
+
             <b>↗</b>
           </button>
 
           <button
             onClick={() =>
-              openLink("https://jansuraksha.gov.in/")
+              openLink(
+                "https://jansuraksha.gov.in/"
+              )
             }
           >
             <span>🛡️</span>
+
             <div>
               <strong>Jan Suraksha</strong>
-              <small>Insurance schemes</small>
+              <small>
+                Insurance schemes
+              </small>
             </div>
+
             <b>↗</b>
           </button>
 
@@ -344,10 +374,14 @@ function WorkerWelfare() {
             }
           >
             <span>💰</span>
+
             <div>
               <strong>Maandhan</strong>
-              <small>Pension & social security</small>
+              <small>
+                Pension & social security
+              </small>
             </div>
+
             <b>↗</b>
           </button>
 
@@ -372,7 +406,9 @@ function WorkerWelfare() {
 
         <button
           onClick={() =>
-            openLink("https://www.eshram.gov.in/helpdesk")
+            openLink(
+              "https://www.eshram.gov.in/helpdesk"
+            )
           }
         >
           Get Help ↗
